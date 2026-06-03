@@ -3,7 +3,6 @@ import omit from 'lodash.omit';
 import { useEffect, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
-import { type z } from 'zod';
 
 import { useFieldMetadataItem } from '@/object-metadata/hooks/useFieldMetadataItem';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
@@ -21,7 +20,6 @@ import { SettingsDataModelFieldDescriptionForm } from '@/settings/data-model/fie
 import { SettingsDataModelFieldIconLabelForm } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldIconLabelForm';
 import { SettingsDataModelFieldSettingsFormCard } from '@/settings/data-model/fields/forms/components/SettingsDataModelFieldSettingsFormCard';
 import { settingsFieldFormSchema } from '@/settings/data-model/fields/forms/validation-schemas/settingsFieldFormSchema';
-import { type SettingsFieldType } from '@/settings/data-model/types/SettingsFieldType';
 import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
 import { ConfirmationModal } from '@/ui/layout/modal/components/ConfirmationModal';
 import { useModal } from '@/ui/layout/modal/hooks/useModal';
@@ -43,7 +41,11 @@ import {
 import { Button } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
-import { FieldMetadataType } from '~/generated-metadata/graphql';
+import {
+  FieldMetadataType,
+  type RelationType,
+  type UpdateOneFieldMetadataItemMutationVariables,
+} from '~/generated-metadata/graphql';
 import { useNavigateApp } from '~/hooks/useNavigateApp';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
 import { getFieldMetadataItemInitialValues } from '~/pages/settings/data-model/utils/getFieldMetadataItemInitialValues';
@@ -55,10 +57,36 @@ export type SettingsDataModelFieldEditFormValues = {
   description?: string | null;
   isLabelSyncedWithName: boolean;
   name?: string;
-  settings?: any;
-  defaultValue?: any;
-  relation?: any;
-} & Record<string, any>;
+  settings?: {
+    format?: string;
+    decimals?: number;
+    subFields?: unknown;
+    displayFormat?: string;
+    customUnicodeDateFormat?: string;
+    junctionTargetFieldId?: string;
+    [key: string]: unknown;
+  } | null;
+  defaultValue?: unknown;
+  relation?: {
+    field?: Pick<
+      UpdateOneFieldMetadataItemMutationVariables['updatePayload'],
+      | 'description'
+      | 'icon'
+      | 'isActive'
+      | 'isUnique'
+      | 'label'
+      | 'name'
+      | 'defaultValue'
+      | 'options'
+      | 'settings'
+      | 'isLabelSyncedWithName'
+    >;
+  };
+  morphRelationObjectMetadataIds?: string[];
+  relationType?: RelationType;
+  iconOnDestination?: string;
+  targetFieldLabel?: string;
+} & Record<string, unknown>;
 
 const DELETE_FIELD_MODAL_ID = 'delete-field-confirmation-modal';
 const StyledDangerButtons = styled.div`
@@ -182,7 +210,7 @@ export const SettingsObjectFieldEdit = () => {
 
     if (
       formValues.type === FieldMetadataType.RELATION &&
-      'relation' in formValues &&
+      isDefined(formValues.relation) &&
       'relation' in dirtyFields
     ) {
       const { relationFieldMetadataItem } =
@@ -190,7 +218,10 @@ export const SettingsObjectFieldEdit = () => {
           fieldMetadataItem: fieldMetadataItem,
         }) ?? {};
 
-      if (isDefined(relationFieldMetadataItem)) {
+      if (
+        isDefined(relationFieldMetadataItem) &&
+        isDefined(formValues.relation.field)
+      ) {
         const result = await updateOneFieldMetadataItem({
           objectMetadataId: objectMetadataItem.id,
           fieldMetadataIdToUpdate: relationFieldMetadataItem.id,
